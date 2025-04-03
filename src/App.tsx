@@ -107,7 +107,7 @@
 //
 // export default App;
 
-import {Routes, Route} from "react-router";
+import {Routes, Route, Navigate} from "react-router";
 import Onboarding from "./features/onboarding/onboarding";
 import Landing from "./features/landing/landing";
 import {useState} from "react";
@@ -118,8 +118,9 @@ const App = () => {
     return (
         <>
             <Routes>
-                <Route path="/welcome" element={<Onboarding username={username} setUsername={setUsername} />}/>
-                <Route path="/logged-in" element={<Landing username={username} />}/>
+                <Route path="/" element={<Navigate to="/welcome"/>}/>
+                <Route path="/welcome" element={<Onboarding username={username} setUsername={setUsername}/>}/>
+                <Route path="/logged-in" element={<Landing username={username}/>}/>
             </Routes>
         </>
     );
