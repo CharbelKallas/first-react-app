@@ -1,34 +1,28 @@
-const Landing = ({username}: any) => {
-    return (
-        <div style={{
-            width: "100vw",
-            height: "100vh",
-            backgroundColor: "cyan",
-            display: "flex",
-            flexDirection: "column",
-        }}>
-            <div style={{
-                width: "100vw",
-                height: "50px",
-                backgroundColor: "black",
-                top: 0,
-                left: 0,
-            }}/>
-            <h1 style={{
-                fontWeight: "bold",
-                textDecoration: "underline",
-                textAlign: "center",
-                margin: "8px",
-            }}>Hello {username}</h1>
+import React from 'react';
+import { LandingProps } from './landing.d';
 
-            <h2 style={{
-                fontWeight: "lighter",
-                color: "red",
-                textAlign: "center",
-                margin: "8px",
-            }}>Welcome to my website!</h2>
+const Landing: React.FC<LandingProps> = ({ username }) => {
+    return (
+        <div style={{ backgroundColor: 'cyan', height: '100vh' }}>
+            <div style={{ backgroundColor: 'black', height: '60px' }}></div>
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: 'calc(100vh - 60px)',
+                }}
+            >
+                <h1 style={{ fontWeight: 'bold', textDecoration: 'underline', fontSize: '3rem', margin: '8px' }}>
+                    Hello {username}
+                </h1>
+                <p style={{ fontSize: '0.9rem', color: 'red', fontWeight: '300', margin: '8px' }}>
+                    Welcome to my website!
+                </p>
+            </div>
         </div>
     );
-}
+};
 
 export default Landing;

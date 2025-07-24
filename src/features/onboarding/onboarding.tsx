@@ -1,24 +1,28 @@
-import {useNavigate} from "react-router";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { OnboardingProps } from './onboarding.d';
 
-const Onboarding = ({username, setUsername}: any) => {
-    let navigate = useNavigate();
+const Onboarding: React.FC<OnboardingProps> = ({ setUsername }) => {
+    const [name, setName] = useState('');
+    const navigate = useNavigate();
 
-    const handleChange = (e: any) => {
-        e.preventDefault();
-        setUsername(e.target.value);
-    }
+    const handleLogin = () => {
+        setUsername(name);
+        navigate('/logged-in');
+    };
 
-    return (<>
-        <input onChange={handleChange}/>
-        <button onClick={() => {
-            if (username === "") {
-                alert("Username is required");
-            } else {
-                navigate("/logged-in");
-            }
-        }}>Login
-        </button>
-    </>);
-}
+    return (
+        <div style={{ padding: '20px' }}>
+            <input
+                type="text"
+                placeholder="Enter your username"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                style={{ marginRight: '10px' }}
+            />
+            <button onClick={handleLogin}>Log In</button>
+        </div>
+    );
+};
 
 export default Onboarding;
