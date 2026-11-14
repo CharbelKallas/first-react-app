@@ -1,28 +1,27 @@
-import React from 'react';
-import { LandingProps } from './landing.d';
+import { useNavigate } from 'react-router';
+import { paths } from '../../router/paths';
+import { useUser } from '../../session/userContext';
 
-const Landing: React.FC<LandingProps> = ({ username }) => {
-    return (
-        <div style={{ backgroundColor: 'cyan', height: '100vh' }}>
-            <div style={{ backgroundColor: 'black', height: '60px' }}></div>
-            <div
-                style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: 'calc(100vh - 60px)',
-                }}
-            >
-                <h1 style={{ fontWeight: 'bold', textDecoration: 'underline', fontSize: '3rem', margin: '8px' }}>
-                    Hello {username}
-                </h1>
-                <p style={{ fontSize: '0.9rem', color: 'red', fontWeight: '300', margin: '8px' }}>
-                    Welcome to my website!
-                </p>
-            </div>
-        </div>
-    );
-};
+export default function Landing() {
+  const { username, logOut } = useUser();
+  const navigate = useNavigate();
 
-export default Landing;
+  const handleLogOut = () => {
+    logOut();
+    navigate(paths.welcome, { replace: true });
+  };
+
+  return (
+    <div className="landing">
+      <header className="landing__bar">
+        <button type="button" className="landing__logout" onClick={handleLogOut}>
+          Log Out
+        </button>
+      </header>
+      <main className="landing__content">
+        <h1 className="landing__greeting">Hello {username}</h1>
+        <p className="landing__tagline">Welcome to my website!</p>
+      </main>
+    </div>
+  );
+}
