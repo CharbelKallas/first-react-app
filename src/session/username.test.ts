@@ -9,6 +9,11 @@ describe('normalizeUsername', () => {
     expect(normalizeUsername('   Ada \t  Lovelace \n')).toBe('Ada Lovelace');
   });
 
+  it('folds fullwidth lookalike letters into plain ones', () => {
+    const fullwidthAda = String.fromCodePoint(0xff21, 0xff44, 0xff41);
+    expect(normalizeUsername(fullwidthAda)).toBe('Ada');
+  });
+
   it('uses the composed Unicode form', () => {
     const decomposed = 'Jose' + String.fromCodePoint(0x301); // e + combining acute
     expect(normalizeUsername(decomposed)).toBe('Jos' + String.fromCodePoint(0xe9));
@@ -68,6 +73,23 @@ describe('validateUsername', () => {
     ['blank Braille pattern', 0x2800],
   ])('rejects a name that is only a %s', (_label, codePoint) => {
     expect(validateUsername(String.fromCodePoint(codePoint))).not.toBeNull();
+  });
+
+  it('allows region flag emoji built with tag characters', () => {
+    const englandFlag = String.fromCodePoint(
+      0x1f3f4, 0xe0067, 0xe0062, 0xe0065, 0xe006e, 0xe0067, 0xe007f,
+    );
+    expect(validateUsername(`Ada ${englandFlag}`)).toBeNull();
+  });
+
+  it('rejects stray tag characters outside a flag', () => {
+    expect(validateUsername(`Ada${String.fromCodePoint(0xe0067, 0xe007f)}`)).toMatch(/not allowed/i);
+  });
+
+  it('counts a joined emoji as one character', () => {
+    const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466);
+    expect(validateUsername('a'.repeat(USERNAME_MAX_LENGTH - 1) + family)).toBeNull();
+    expect(validateUsername('a'.repeat(USERNAME_MAX_LENGTH) + family)).toMatch(/at most/i);
   });
 
   it('allows emoji built with zero-width joiners', () => {

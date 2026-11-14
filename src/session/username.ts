@@ -14,14 +14,27 @@ const VISIBLE_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u;
 //   empty space, a common way to fake a blank or lookalike name.
 const FORBIDDEN_CHARS = /[\p{Cc}\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/u;
 
-// A zero-width joiner between two emoji builds one emoji (e.g. a person + laptop
-// becomes a technologist), so those joiners are allowed. Variation selectors and
-// skin-tone modifiers may sit before the joiner.
+// Emoji are allowed to use two kinds of otherwise-forbidden format characters:
+// - a zero-width joiner between two emoji builds one emoji (person + laptop =
+//   technologist); variation selectors and skin tones may sit before it;
+// - tag characters after a black flag spell out a region flag (England, Scotland,
+//   Wales), ending with a cancel tag.
 const EMOJI_JOINER = /(?<=[\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F])\u200D(?=\p{Extended_Pictographic})/gu;
+const EMOJI_FLAG_TAGS = /(?<=\u{1F3F4})[\u{E0020}-\u{E007E}]+\u{E007F}/gu;
 
-/** Trim, collapse inner whitespace and use a canonical Unicode form. */
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/** Number of user-perceived characters (a joined emoji or flag counts as one). */
+function visibleLength(text: string): number {
+  return Array.from(graphemes.segment(text)).length;
+}
+
+/**
+ * Trim, collapse inner whitespace and use the compatibility-composed Unicode form
+ * (NFKC), which also folds lookalikes such as fullwidth letters into plain ones.
+ */
 export function normalizeUsername(raw: string): string {
-  return raw.normalize('NFC').replace(/\s+/gu, ' ').trim();
+  return raw.normalize('NFKC').replace(/\s+/gu, ' ').trim();
 }
 
 /**
@@ -30,11 +43,11 @@ export function normalizeUsername(raw: string): string {
  */
 export function validateUsername(name: string): string | null {
   if (!VISIBLE_CHAR.test(name)) return EMPTY_MESSAGE;
-  // Count code points, not UTF-16 units, so emoji count as one character.
-  if ([...name].length > USERNAME_MAX_LENGTH) {
+  if (visibleLength(name) > USERNAME_MAX_LENGTH) {
     return `Username must be at most ${USERNAME_MAX_LENGTH} characters.`;
   }
-  if (FORBIDDEN_CHARS.test(name.replace(EMOJI_JOINER, ''))) {
+  const withoutEmojiFormatting = name.replace(EMOJI_JOINER, '').replace(EMOJI_FLAG_TAGS, '');
+  if (FORBIDDEN_CHARS.test(withoutEmojiFormatting)) {
     return 'Username contains characters that are not allowed.';
   }
   return null;
