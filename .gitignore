@@ -19,8 +19,9 @@
 .vscode/*
 !.vscode/extensions.json
 
-# local tooling
-/.claude/
+# personal Claude Code files (shared .claude/ settings may still be committed)
+/.claude/settings.local.json
+/.claude/launch.json
 
 # logs
 npm-debug.log*

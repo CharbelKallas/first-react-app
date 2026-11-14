@@ -1,20 +1,13 @@
-import { useNavigate } from 'react-router';
-import { paths } from '../../router/paths';
 import { useUser } from '../../session/userContext';
 
 export default function Landing() {
   const { username, logOut } = useUser();
-  const navigate = useNavigate();
-
-  const handleLogOut = () => {
-    logOut();
-    navigate(paths.welcome, { replace: true });
-  };
 
   return (
     <div className="landing">
       <header className="landing__bar">
-        <button type="button" className="landing__logout" onClick={handleLogOut}>
+        {/* Clearing the user is enough: the route guard then redirects to /welcome. */}
+        <button type="button" className="landing__logout" onClick={logOut}>
           Log Out
         </button>
       </header>

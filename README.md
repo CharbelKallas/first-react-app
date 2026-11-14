@@ -15,7 +15,8 @@ forgotten when the tab is closed or you log out.
 
 ## Requirements
 
-- Node.js 22.22 or newer (see `.nvmrc`; run `nvm use` if you use nvm)
+- Node.js 22.22.2+, 24.15+ or 26+ (the versions jsdom and Vitest support).
+  `.nvmrc` pins Node 24; run `nvm use` if you use nvm.
 
 ## Scripts
 

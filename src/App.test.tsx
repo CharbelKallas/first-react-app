@@ -115,6 +115,25 @@ describe('session', () => {
   });
 });
 
+describe('when sessionStorage is blocked', () => {
+  it('still logs in and out, keeping the user in memory', async () => {
+    for (const method of ['getItem', 'setItem', 'removeItem'] as const) {
+      vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+        throw new DOMException('Storage is disabled', 'SecurityError');
+      });
+    }
+    const { user, location } = renderAt('/');
+    expect(location()).toBe('/welcome');
+
+    await user.type(screen.getByLabelText(/username/i), 'Ada{Enter}');
+    expect(location()).toBe('/logged-in');
+    expect(screen.getByRole('heading', { name: 'Hello Ada' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /log out/i }));
+    expect(location()).toBe('/welcome');
+  });
+});
+
 describe('App (real browser router)', () => {
   it('boots at the current URL and completes the flow', async () => {
     window.history.pushState(null, '', '/');

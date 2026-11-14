@@ -53,6 +53,25 @@ body {
   background-color: black;
 }
 
+.landing__logout {
+  padding: 6px 14px;
+  border: 1px solid white;
+  border-radius: 4px;
+  background: transparent;
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+.landing__logout:hover {
+  background-color: rgb(255 255 255 / 15%);
+}
+
+.landing__logout:focus-visible {
+  outline: 2px solid cyan;
+  outline-offset: 2px;
+}
+
 .landing__content {
   display: flex;
   flex-direction: column;

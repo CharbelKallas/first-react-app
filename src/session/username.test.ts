@@ -47,4 +47,35 @@ describe('validateUsername', () => {
     expect(validateUsername(`a${NULL_CHAR}b`)).toMatch(/not allowed/i);
     expect(validateUsername(`admin${RIGHT_TO_LEFT_OVERRIDE}nimda`)).toMatch(/not allowed/i);
   });
+
+  it.each([
+    ['zero-width space', 0x200b],
+    ['left-to-right mark', 0x200e],
+    ['right-to-left mark', 0x200f],
+    ['Arabic letter mark', 0x061c],
+    ['word joiner', 0x2060],
+    ['byte order mark', 0xfeff],
+    ['zero-width joiner between letters', 0x200d],
+  ])('rejects a %s hidden inside a name', (_label, codePoint) => {
+    expect(validateUsername(`Ada${String.fromCodePoint(codePoint)}`)).toMatch(/not allowed/i);
+  });
+
+  it.each([
+    ['Hangul filler', 0x3164],
+    ['Hangul choseong filler', 0x115f],
+    ['Hangul jungseong filler', 0x1160],
+    ['halfwidth Hangul filler', 0xffa0],
+    ['blank Braille pattern', 0x2800],
+  ])('rejects a name that is only a %s', (_label, codePoint) => {
+    expect(validateUsername(String.fromCodePoint(codePoint))).not.toBeNull();
+  });
+
+  it('allows emoji built with zero-width joiners', () => {
+    const technologist = String.fromCodePoint(0x1f469, 0x200d, 0x1f4bb);
+    const darkSkinTechnologist = String.fromCodePoint(0x1f469, 0x1f3ff, 0x200d, 0x1f4bb);
+    const rainbowFlag = String.fromCodePoint(0x1f3f3, 0xfe0f, 0x200d, 0x1f308);
+    expect(validateUsername(`Ada ${technologist}`)).toBeNull();
+    expect(validateUsername(darkSkinTechnologist)).toBeNull();
+    expect(validateUsername(rainbowFlag)).toBeNull();
+  });
 });
