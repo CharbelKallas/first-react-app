@@ -118,21 +118,47 @@ describe('validateUsername', () => {
     expect(validateUsername(kiss)).toBeNull();
   });
 
-  it('rejects stacked combining marks (Zalgo text) but allows normal accents', () => {
-    const acute = String.fromCodePoint(0x301);
-    const below = String.fromCodePoint(0x323);
-    expect(validateUsername('a' + acute.repeat(500))).not.toBeNull();
-    expect(validateUsername('a' + acute.repeat(5))).toMatch(/not allowed/i);
-    expect(validateUsername('Nguy' + 'e' + below + String.fromCodePoint(0x302) + 'n')).toBeNull();
-    expect(validateUsername('1' + String.fromCodePoint(0xfe0f, 0x20e3))).toBeNull(); // keycap
+  it('rejects Zalgo text: long stacks or many marks overall', () => {
+    const overlays = String.fromCodePoint(0x334, 0x335, 0x336, 0x337);
+    expect(validateUsername('a' + String.fromCodePoint(0x301).repeat(7))).toMatch(/accent marks/i);
+    expect(validateUsername(('a' + overlays).repeat(25))).toMatch(/accent marks/i);
+    expect(validateUsername('a' + String.fromCodePoint(0x301).repeat(500))).not.toBeNull();
   });
 
-  it('caps the total number of code points', () => {
+  it('accepts real names that use several marks per letter', () => {
+    const name = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+    const realNames = {
+      // Shalom, fully pointed with cantillation and meteg: 5 marks on the shin.
+      hebrew: name(0x5e9, 0x5bc, 0x5c1, 0x5b8, 0x591, 0x5bd, 0x5dc, 0x5d5, 0x5b9, 0x5dd),
+      // Tibetan "bsgrubs": a stack of two subjoined letters plus a vowel sign.
+      tibetan: name(0xf56, 0xf66, 0xf92, 0xfb2, 0xf74, 0xf56, 0xf66),
+      // Thai "pan" with a vowel and a tone mark on one letter.
+      thai: name(0xe1b, 0xe31, 0xe49, 0xe19),
+      // Hindi "kshatriya" with a virama conjunct.
+      hindi: name(0x915, 0x94d, 0x937, 0x924, 0x94d, 0x930, 0x93f, 0x92f),
+      // Vietnamese "Nguyen" typed with decomposed accents.
+      vietnamese: 'Nguy' + name(0x65, 0x323, 0x302) + 'n',
+      keycap: '1' + name(0xfe0f, 0x20e3),
+    };
+    for (const [script, value] of Object.entries(realNames)) {
+      expect([script, validateUsername(normalizeUsername(value))]).toEqual([script, null]);
+    }
+  });
+
+  it('rejects private-use and unassigned characters', () => {
+    expect(validateUsername('Ada' + String.fromCodePoint(0xf8ff))).toMatch(/not allowed/i);
+    expect(validateUsername('Ada' + String.fromCodePoint(0x378))).toMatch(/not allowed/i);
+    expect(validateUsername('Ada' + String.fromCodePoint(0xf0000))).toMatch(/not allowed/i);
+  });
+
+  it('caps the total number of code points with its own message', () => {
     const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466);
     // 7 code points each: 18 families = 126 code points (allowed), 19 = 133 (over the
     // 128 cap) even though both are well under 32 visible characters.
     expect(validateUsername(family.repeat(18))).toBeNull();
-    expect(validateUsername(family.repeat(19))).toMatch(/at most/i);
+    const error = validateUsername(family.repeat(19));
+    expect(error).toMatch(/too long/i);
+    expect(error).not.toMatch(/32/);
   });
 
   it('allows emoji built with zero-width joiners', () => {

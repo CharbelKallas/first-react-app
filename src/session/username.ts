@@ -7,23 +7,37 @@ const USERNAME_MAX_CODE_POINTS = USERNAME_MAX_LENGTH * 4;
 
 const EMPTY_MESSAGE = 'Please enter a username.';
 const TOO_LONG_MESSAGE = `Username must be at most ${USERNAME_MAX_LENGTH} characters.`;
+const TOO_COMPLEX_MESSAGE = 'Username is too long. Try fewer emoji or accents.';
+const TOO_MANY_MARKS_MESSAGE = 'Username has too many accent marks.';
 const NOT_ALLOWED_MESSAGE = 'Username contains characters that are not allowed.';
 
 // At least one letter, digit, punctuation mark or symbol, so empty input and a
 // name made only of invisible characters both count as "no username".
 const VISIBLE_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u;
 
-// Characters that are invisible or change how surrounding text is displayed:
-// - Cc: control characters
-// - Cf: format characters (zero-width spaces/joiners, direction marks such as
-//   LRM/RLM/ALM, bidi overrides and isolates, BOM, word joiner, tag characters)
-// - Hangul fillers and the blank Braille pattern: letters/symbols that render as
-//   empty space, a common way to fake a blank or lookalike name.
-const FORBIDDEN_CHARS = /[\p{Cc}\p{Cf}\u115F\u1160\u3164\uFFA0\u2800]/u;
+// Allowlist: every character must be a letter, combining mark (accent), digit,
+// punctuation, symbol or a plain space. This excludes control and format
+// characters (zero-width spaces, direction marks, BOM, tag characters...),
+// private-use characters (which render differently on each device) and code
+// points Unicode has not assigned yet. Emoji joiners and flag tags are removed
+// before this check when they are part of a real emoji.
+const NOT_ALLOWED_CHAR = /[^\p{L}\p{M}\p{N}\p{P}\p{S} ]/u;
 
-// More than four combining marks in a row is "Zalgo" text that spills over
-// neighbouring lines; real scripts and keycap emoji need far fewer.
-const LONG_MARK_RUN = /\p{M}{5,}/u;
+// Letters and symbols that render as empty space: Hangul fillers and the blank
+// Braille pattern, a common way to fake a blank or lookalike name.
+const BLANK_LOOKING_CHAR = /[\u115F\u1160\u3164\uFFA0\u2800]/u;
+
+// Combining marks (accents). Variation selectors are marks too, but only pick
+// between text and emoji style, so they are not counted.
+const VARIATION_SELECTORS = /[\uFE0E\uFE0F]/gu;
+const COMBINING_MARK = /\p{M}/gu;
+const BASE_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/gu;
+// Fully pointed Hebrew or stacked Tibetan can put four marks on one letter;
+// more than six is "Zalgo" text that spills over neighbouring lines.
+const MAX_MARKS_PER_CHARACTER = 6;
+const TOO_MANY_MARKS_IN_A_ROW = new RegExp(`\\p{M}{${MAX_MARKS_PER_CHARACTER + 1},}`, 'u');
+// Real names average well under two marks per character; Zalgo text uses many.
+const MAX_MARKS_PER_BASE_CHAR = 2;
 
 // An emoji, optionally followed by a skin tone or the emoji presentation selector.
 const EMOJI = `\\p{Extended_Pictographic}(?:\\p{Emoji_Modifier}|\\uFE0F)?`;
@@ -59,6 +73,14 @@ function visibleLength(text: string): number {
   return Array.from(graphemeSegmenter.segment(text)).length;
 }
 
+function hasTooManyMarks(name: string): boolean {
+  const text = name.replace(VARIATION_SELECTORS, '');
+  if (TOO_MANY_MARKS_IN_A_ROW.test(text)) return true;
+  const marks = text.match(COMBINING_MARK)?.length ?? 0;
+  const bases = text.match(BASE_CHAR)?.length ?? 0;
+  return marks > bases * MAX_MARKS_PER_BASE_CHAR;
+}
+
 /**
  * Trim, collapse inner whitespace and use the compatibility-composed Unicode form
  * (NFKC), which also folds lookalikes such as fullwidth letters into plain ones.
@@ -73,11 +95,13 @@ export function normalizeUsername(raw: string): string {
  */
 export function validateUsername(name: string): string | null {
   if (!VISIBLE_CHAR.test(name)) return EMPTY_MESSAGE;
-  if ([...name].length > USERNAME_MAX_CODE_POINTS || visibleLength(name) > USERNAME_MAX_LENGTH) {
-    return TOO_LONG_MESSAGE;
-  }
-  if (LONG_MARK_RUN.test(name) || LONG_EMOJI_CHAIN.test(name)) return NOT_ALLOWED_MESSAGE;
+  if (visibleLength(name) > USERNAME_MAX_LENGTH) return TOO_LONG_MESSAGE;
+  if ([...name].length > USERNAME_MAX_CODE_POINTS) return TOO_COMPLEX_MESSAGE;
+  if (LONG_EMOJI_CHAIN.test(name)) return NOT_ALLOWED_MESSAGE;
   const withoutEmojiFormatting = name.replace(EMOJI_JOINER, '').replace(EMOJI_FLAG_TAGS, '');
-  if (FORBIDDEN_CHARS.test(withoutEmojiFormatting)) return NOT_ALLOWED_MESSAGE;
+  if (NOT_ALLOWED_CHAR.test(withoutEmojiFormatting) || BLANK_LOOKING_CHAR.test(name)) {
+    return NOT_ALLOWED_MESSAGE;
+  }
+  if (hasTooManyMarks(name)) return TOO_MANY_MARKS_MESSAGE;
   return null;
 }
