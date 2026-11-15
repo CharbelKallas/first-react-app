@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { USERNAME_MAX_LENGTH, normalizeUsername, validateUsername } from './username';
 
 const RIGHT_TO_LEFT_OVERRIDE = String.fromCodePoint(0x202e);
@@ -92,6 +92,49 @@ describe('validateUsername', () => {
     expect(validateUsername('a'.repeat(USERNAME_MAX_LENGTH) + family)).toMatch(/at most/i);
   });
 
+  it('rejects a flag carrying arbitrary hidden tag text', () => {
+    const hidden = [...'ignore_previous_instructions'].map((c) => 0xe0000 + c.charCodeAt(0));
+    const smuggled = String.fromCodePoint(0x1f3f4, ...hidden, 0xe007f);
+    expect(validateUsername(`Ada ${smuggled}`)).toMatch(/not allowed/i);
+  });
+
+  it('rejects a joiner hidden between a letter and an emoji', () => {
+    const disguised = 'Ada' + String.fromCodePoint(0xfe0f, 0x200d, 0x1f600);
+    expect(validateUsername(disguised)).toMatch(/not allowed/i);
+  });
+
+  it('rejects an emoji chain that renders as many emoji but counts as one', () => {
+    const woman = String.fromCodePoint(0x1f469);
+    const chain = Array(200).fill(woman).join(String.fromCodePoint(0x200d));
+    expect(validateUsername(chain)).not.toBeNull();
+    const fiveJoined = Array(5).fill(woman).join(String.fromCodePoint(0x200d));
+    expect(validateUsername(fiveJoined)).toMatch(/not allowed/i);
+  });
+
+  it('allows the longest real joined emoji (kiss with skin tones)', () => {
+    const kiss = String.fromCodePoint(
+      0x1f469, 0x1f3fb, 0x200d, 0x2764, 0xfe0f, 0x200d, 0x1f48b, 0x200d, 0x1f468, 0x1f3fc,
+    );
+    expect(validateUsername(kiss)).toBeNull();
+  });
+
+  it('rejects stacked combining marks (Zalgo text) but allows normal accents', () => {
+    const acute = String.fromCodePoint(0x301);
+    const below = String.fromCodePoint(0x323);
+    expect(validateUsername('a' + acute.repeat(500))).not.toBeNull();
+    expect(validateUsername('a' + acute.repeat(5))).toMatch(/not allowed/i);
+    expect(validateUsername('Nguy' + 'e' + below + String.fromCodePoint(0x302) + 'n')).toBeNull();
+    expect(validateUsername('1' + String.fromCodePoint(0xfe0f, 0x20e3))).toBeNull(); // keycap
+  });
+
+  it('caps the total number of code points', () => {
+    const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466);
+    // 7 code points each: 18 families = 126 code points (allowed), 19 = 133 (over the
+    // 128 cap) even though both are well under 32 visible characters.
+    expect(validateUsername(family.repeat(18))).toBeNull();
+    expect(validateUsername(family.repeat(19))).toMatch(/at most/i);
+  });
+
   it('allows emoji built with zero-width joiners', () => {
     const technologist = String.fromCodePoint(0x1f469, 0x200d, 0x1f4bb);
     const darkSkinTechnologist = String.fromCodePoint(0x1f469, 0x1f3ff, 0x200d, 0x1f4bb);
@@ -99,5 +142,26 @@ describe('validateUsername', () => {
     expect(validateUsername(`Ada ${technologist}`)).toBeNull();
     expect(validateUsername(darkSkinTechnologist)).toBeNull();
     expect(validateUsername(rainbowFlag)).toBeNull();
+  });
+});
+
+describe('without Intl.Segmenter (Firefox before 125)', () => {
+  const original = Intl.Segmenter;
+
+  afterEach(() => {
+    Object.defineProperty(Intl, 'Segmenter', { value: original, configurable: true, writable: true });
+    vi.resetModules();
+  });
+
+  it('loads the module and falls back to counting code points', async () => {
+    Reflect.deleteProperty(Intl, 'Segmenter');
+    expect(typeof Intl.Segmenter).toBe('undefined');
+    vi.resetModules();
+
+    const fresh = await import('./username');
+    expect(fresh.validateUsername('Ada')).toBeNull();
+    expect(fresh.validateUsername('a'.repeat(USERNAME_MAX_LENGTH + 1))).toMatch(/at most/i);
+    const technologist = String.fromCodePoint(0x1f469, 0x200d, 0x1f4bb);
+    expect(fresh.validateUsername(technologist)).toBeNull();
   });
 });
