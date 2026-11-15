@@ -1,3 +1,5 @@
+import { countCharacters } from './characterCount';
+
 export const USERNAME_MAX_LENGTH = 32;
 
 // Hard cap on code points. One user-perceived character can be built from many
@@ -78,42 +80,6 @@ const EMOJI_FLAG_TAGS = new RegExp(
   'gu',
 );
 
-let graphemeSegmenter: Intl.Segmenter | undefined;
-
-// Fallback for browsers without Intl.Segmenter: drop every code point that
-// joins the previous character instead of starting a new one.
-// - a regional-indicator pair is one flag;
-const REGIONAL_INDICATOR_PAIR = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
-// - whatever follows a zero-width joiner is part of the same emoji;
-const AFTER_JOINER = /(?<=\u200D)[^\u200D]/gu;
-// - a letter after an Indic virama (linker) forms a conjunct with the one before;
-const AFTER_CONJUNCT_LINKER = /(?<=[\u094D\u09CD\u0ACD\u0B4D\u0C4D\u0D4D]\p{M}*)\p{L}/gu;
-// - Hangul vowel and final jamo attach to the syllable before them;
-const HANGUL_TRAILING_JAMO = /[\u1160-\u11FF\uD7B0-\uD7FF]/gu;
-// - marks, joiners, skin tones and flag tag characters never start a character.
-const NON_STARTER = /[\p{M}\u200D\p{Emoji_Modifier}\u{E0020}-\u{E007F}]/gu;
-
-/**
- * Number of user-perceived characters (a joined emoji or flag counts as one).
- * Intl.Segmenter is missing in some supported browsers (Firefox before 125), so
- * it is created on first use. Without it, an approximation is used that may
- * count fewer characters than real segmentation but never more, so it never
- * rejects a name that other browsers accept; the code-point cap still applies.
- */
-function visibleLength(text: string): number {
-  if (typeof Intl.Segmenter !== 'function') {
-    const starters = text
-      .replace(REGIONAL_INDICATOR_PAIR, 'F')
-      .replace(AFTER_JOINER, '')
-      .replace(AFTER_CONJUNCT_LINKER, '')
-      .replace(HANGUL_TRAILING_JAMO, '')
-      .replace(NON_STARTER, '');
-    return [...starters].length;
-  }
-  graphemeSegmenter ??= new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-  return Array.from(graphemeSegmenter.segment(text)).length;
-}
-
 function hasTooManyMarks(name: string): boolean {
   const text = name.replace(VARIATION_SELECTORS, '');
   if (TOO_MANY_MARKS_IN_A_ROW.test(text)) return true;
@@ -141,7 +107,7 @@ export function normalizeUsername(raw: string): string {
  */
 export function validateUsername(name: string): string | null {
   if (!VISIBLE_CHAR.test(name)) return EMPTY_MESSAGE;
-  if (visibleLength(name) > USERNAME_MAX_LENGTH) return TOO_LONG_MESSAGE;
+  if (countCharacters(name) > USERNAME_MAX_LENGTH) return TOO_LONG_MESSAGE;
   if ([...name].length > USERNAME_MAX_CODE_POINTS) return TOO_COMPLEX_MESSAGE;
   if (LONG_EMOJI_CHAIN.test(name)) return NOT_ALLOWED_MESSAGE;
   const withoutEmojiFormatting = name

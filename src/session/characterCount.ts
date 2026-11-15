@@ -1,0 +1,58 @@
+// Counting user-perceived characters ("grapheme clusters"): a joined emoji, a
+// flag or a letter with its accents counts as one.
+
+let graphemeSegmenter: Intl.Segmenter | undefined;
+
+/**
+ * Number of user-perceived characters in `text`. Uses Intl.Segmenter when the
+ * browser has it (created on first use, so the module loads everywhere) and
+ * {@link fallbackCharacterCount} otherwise (Firefox before 125).
+ */
+export function countCharacters(text: string): number {
+  if (typeof Intl.Segmenter !== 'function') return fallbackCharacterCount(text);
+  graphemeSegmenter ??= new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  return Array.from(graphemeSegmenter.segment(text)).length;
+}
+
+// Code points that never start a character: marks, other grapheme extenders,
+// skin tones and zero-width joiners.
+const EXTENDER = `\\p{M}\\p{Grapheme_Extend}\\p{Emoji_Modifier}\\u200D`;
+
+// The fallback removes every code point that joins a neighbouring character
+// instead of starting a new one (rules from Unicode UAX #29), then counts the rest.
+// - a regional-indicator pair is one flag;
+const REGIONAL_INDICATOR_PAIR = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
+// - whatever follows a zero-width joiner is part of the same emoji;
+const AFTER_JOINER = /(?<=\u200D)[^\u200D]/gu;
+// - a letter after an Indic virama (conjunct linker) joins the letter before it;
+const AFTER_CONJUNCT_LINKER = new RegExp(
+  `(?<=[\\u094D\\u09CD\\u0ACD\\u0B4D\\u0C4D\\u0D4D][${EXTENDER}]*)\\p{L}`,
+  'gu',
+);
+// - "Prepend" characters (such as the Malayalam dot reph) join the next character;
+const PREPEND = /[\u0600-\u0605\u06DD\u070F\u0890\u0891\u08E2\u0D4E\u{110BD}\u{110CD}\u{111C2}\u{111C3}\u{1193F}\u{11941}\u{11A3A}\u{11A84}-\u{11A89}\u{11D46}\u{11F02}]/gu;
+// - a Hangul initial consonant joins a following initial or syllable, and vowel
+//   and final jamo join whatever comes before them;
+const HANGUL_JOINING_INITIAL = /[\u1100-\u115F\uA960-\uA97F](?=[\u1100-\u115F\uA960-\uA97F\uAC00-\uD7A3])/gu;
+const HANGUL_TRAILING_JAMO = /[\u1160-\u11FF\uD7B0-\uD7FF]/gu;
+// - and extenders never start one.
+const NON_STARTER = new RegExp(`[${EXTENDER}]`, 'gu');
+
+/**
+ * Approximate character count without Intl.Segmenter. It may count fewer
+ * characters than real segmentation (it is lenient about rare sequences) but
+ * never more, so it never rejects a name that other browsers accept.
+ */
+export function fallbackCharacterCount(text: string): number {
+  const starters = text
+    // Order matters: rules that look at a neighbour run before the joiner rule
+    // removes that neighbour.
+    .replace(REGIONAL_INDICATOR_PAIR, 'F')
+    .replace(AFTER_CONJUNCT_LINKER, '')
+    .replace(PREPEND, '')
+    .replace(HANGUL_JOINING_INITIAL, '')
+    .replace(HANGUL_TRAILING_JAMO, '')
+    .replace(AFTER_JOINER, '')
+    .replace(NON_STARTER, '');
+  return [...starters].length;
+}

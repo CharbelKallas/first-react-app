@@ -44,6 +44,6 @@ src/
   main.tsx                 entry point
   App.tsx                  providers + router
   router/                  routes, route guard, path constants
-  session/                 username rules, storage, user context
+  session/                 username rules, character counting, storage, user context
   features/                onboarding, landing and not-found pages
 ```
