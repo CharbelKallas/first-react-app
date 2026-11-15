@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { USERNAME_MAX_LENGTH, normalizeUsername, validateUsername } from './username';
+import {
+  USERNAME_MAX_INPUT_LENGTH,
+  USERNAME_MAX_LENGTH,
+  normalizeUsername,
+  parseUsername,
+  validateUsername,
+} from './username';
 
 const RIGHT_TO_LEFT_OVERRIDE = String.fromCodePoint(0x202e);
 const NULL_CHAR = String.fromCodePoint(0);
@@ -161,6 +167,32 @@ describe('validateUsername', () => {
     expect(error).not.toMatch(/32/);
   });
 
+  it.each([
+    ['variation selector 1', 0xfe00],
+    ['combining grapheme joiner', 0x34f],
+    ['Khmer inherent vowel', 0x17b4],
+    ['Mongolian free variation selector', 0x180b],
+    ['supplementary variation selector', 0xe0100],
+  ])('rejects an invisible %s after a letter', (_label, codePoint) => {
+    expect(validateUsername(`Ada${String.fromCodePoint(codePoint)}`)).toMatch(/not allowed/i);
+  });
+
+  it('rejects bytes hidden as variation selectors', () => {
+    const hiddenByte = (b: number) => String.fromCodePoint(b < 16 ? 0xfe00 + b : 0xe0100 + b - 16);
+    const bytes = [...new TextEncoder().encode('hi')];
+    const carrier = [...'Adaline'].map((ch) => ch + bytes.map(hiddenByte).join('')).join('');
+    expect(validateUsername(carrier)).toMatch(/not allowed/i);
+  });
+
+  it('allows emoji and text style selectors only where they are visible', () => {
+    const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+    expect(validateUsername('Ada ' + cp(0x2764, 0xfe0f))).toBeNull(); // red heart
+    expect(validateUsername('Ada ' + cp(0x263a, 0xfe0e))).toBeNull(); // text-style smiley
+    expect(validateUsername('Ada ' + cp(0x31, 0xfe0f, 0x20e3))).toBeNull(); // keycap 1
+    expect(validateUsername('Ada' + cp(0xfe0f))).toMatch(/not allowed/i);
+    expect(validateUsername('Ada ' + cp(0x2764, 0xfe0f, 0xfe0f))).toMatch(/not allowed/i);
+  });
+
   it('allows emoji built with zero-width joiners', () => {
     const technologist = String.fromCodePoint(0x1f469, 0x200d, 0x1f4bb);
     const darkSkinTechnologist = String.fromCodePoint(0x1f469, 0x1f3ff, 0x200d, 0x1f4bb);
@@ -189,5 +221,36 @@ describe('without Intl.Segmenter (Firefox before 125)', () => {
     expect(fresh.validateUsername('a'.repeat(USERNAME_MAX_LENGTH + 1))).toMatch(/at most/i);
     const technologist = String.fromCodePoint(0x1f469, 0x200d, 0x1f4bb);
     expect(fresh.validateUsername(technologist)).toBeNull();
+  });
+
+  it('does not count accents and joiners towards the limit', async () => {
+    Reflect.deleteProperty(Intl, 'Segmenter');
+    vi.resetModules();
+    const fresh = await import('./username');
+
+    // 11 Hindi conjuncts: 11 characters on screen, 33 code points.
+    const conjunct = String.fromCodePoint(0x915, 0x94d, 0x937);
+    expect(fresh.validateUsername(conjunct.repeat(11))).toBeNull();
+    const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466);
+    expect(fresh.validateUsername('Ada ' + family)).toBeNull();
+  });
+});
+
+describe('parseUsername', () => {
+  it('normalizes and validates in one step', () => {
+    expect(parseUsername('  Ada  ')).toEqual({ ok: true, name: 'Ada' });
+    expect(parseUsername('   ')).toEqual({ ok: false, error: expect.stringMatching(/enter a username/i) });
+  });
+
+  it('rejects oversized input before doing any Unicode work', () => {
+    const normalize = vi.spyOn(String.prototype, 'normalize');
+    const result = parseUsername('a'.repeat(5_000_000));
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/too long/i) });
+    expect(normalize).not.toHaveBeenCalled();
+  });
+
+  it('accepts a valid name padded with whitespace up to the input limit', () => {
+    const padded = 'Ada'.padEnd(USERNAME_MAX_INPUT_LENGTH, ' ');
+    expect(parseUsername(padded)).toEqual({ ok: true, name: 'Ada' });
   });
 });

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { paths } from '../../router/paths';
 import { useUser } from '../../session/userContext';
-import { USERNAME_MAX_LENGTH } from '../../session/username';
+import { USERNAME_MAX_INPUT_LENGTH, USERNAME_MAX_LENGTH } from '../../session/username';
 
 export default function Onboarding() {
   const { logIn } = useUser();
@@ -31,6 +31,7 @@ export default function Onboarding() {
           name="username"
           type="text"
           autoComplete="username"
+          maxLength={USERNAME_MAX_INPUT_LENGTH}
           placeholder="Enter your username"
           value={name}
           onChange={(event) => {

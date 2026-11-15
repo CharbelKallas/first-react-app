@@ -5,6 +5,11 @@ export const USERNAME_MAX_LENGTH = 32;
 // bound the stored name.
 const USERNAME_MAX_CODE_POINTS = USERNAME_MAX_LENGTH * 4;
 
+// Raw input longer than this (in UTF-16 units) is rejected before any Unicode
+// processing, so a huge paste cannot make normalization or segmentation slow.
+// Generous enough that whitespace or decomposed accents around a valid name fit.
+export const USERNAME_MAX_INPUT_LENGTH = USERNAME_MAX_CODE_POINTS * 4;
+
 const EMPTY_MESSAGE = 'Please enter a username.';
 const TOO_LONG_MESSAGE = `Username must be at most ${USERNAME_MAX_LENGTH} characters.`;
 const TOO_COMPLEX_MESSAGE = 'Username is too long. Try fewer emoji or accents.';
@@ -22,6 +27,13 @@ const VISIBLE_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u;
 // points Unicode has not assigned yet. Emoji joiners and flag tags are removed
 // before this check when they are part of a real emoji.
 const NOT_ALLOWED_CHAR = /[^\p{L}\p{M}\p{N}\p{P}\p{S} ]/u;
+
+// Marks that render as nothing: variation selectors (also usable to hide bytes of
+// data), the combining grapheme joiner, Khmer inherent vowels and Mongolian free
+// variation selectors. The emoji/text style selectors U+FE0E/U+FE0F are allowed
+// only directly after an emoji or a keycap base, where they have a visible effect.
+const INVISIBLE_MARK = /[\u034F\u17B4\u17B5\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/u;
+const EMOJI_STYLE_SELECTOR = /(?<=[\p{Extended_Pictographic}0-9#*])\uFE0E|(?<=[\p{Extended_Pictographic}\p{Emoji_Modifier}0-9#*])\uFE0F/gu;
 
 // Letters and symbols that render as empty space: Hangul fillers and the blank
 // Braille pattern, a common way to fake a blank or lookalike name.
@@ -62,13 +74,19 @@ const EMOJI_FLAG_TAGS = new RegExp(
 
 let graphemeSegmenter: Intl.Segmenter | undefined;
 
+// Code points that never start a new user-perceived character: combining marks,
+// zero-width joiners, skin tones and flag tag characters.
+const NON_STARTER = /[\p{M}\u200D\p{Emoji_Modifier}\u{E0020}-\u{E007F}]/gu;
+
 /**
  * Number of user-perceived characters (a joined emoji or flag counts as one).
  * Intl.Segmenter is missing in some supported browsers (Firefox before 125), so
- * it is created on first use and code points are counted when it is absent.
+ * it is created on first use. Without it, code points that cannot start a new
+ * character are ignored, which is close to what users see (a joined emoji counts
+ * once per part) and never rejects a name that real segmentation would accept.
  */
 function visibleLength(text: string): number {
-  if (typeof Intl.Segmenter !== 'function') return [...text].length;
+  if (typeof Intl.Segmenter !== 'function') return [...text.replace(NON_STARTER, '')].length;
   graphemeSegmenter ??= new Intl.Segmenter(undefined, { granularity: 'grapheme' });
   return Array.from(graphemeSegmenter.segment(text)).length;
 }
@@ -98,10 +116,30 @@ export function validateUsername(name: string): string | null {
   if (visibleLength(name) > USERNAME_MAX_LENGTH) return TOO_LONG_MESSAGE;
   if ([...name].length > USERNAME_MAX_CODE_POINTS) return TOO_COMPLEX_MESSAGE;
   if (LONG_EMOJI_CHAIN.test(name)) return NOT_ALLOWED_MESSAGE;
-  const withoutEmojiFormatting = name.replace(EMOJI_JOINER, '').replace(EMOJI_FLAG_TAGS, '');
-  if (NOT_ALLOWED_CHAR.test(withoutEmojiFormatting) || BLANK_LOOKING_CHAR.test(name)) {
+  const withoutEmojiFormatting = name
+    .replace(EMOJI_JOINER, '')
+    .replace(EMOJI_FLAG_TAGS, '')
+    .replace(EMOJI_STYLE_SELECTOR, '');
+  if (
+    NOT_ALLOWED_CHAR.test(withoutEmojiFormatting) ||
+    INVISIBLE_MARK.test(withoutEmojiFormatting) ||
+    BLANK_LOOKING_CHAR.test(name)
+  ) {
     return NOT_ALLOWED_MESSAGE;
   }
   if (hasTooManyMarks(name)) return TOO_MANY_MARKS_MESSAGE;
   return null;
+}
+
+export type ParsedUsername = { ok: true; name: string } | { ok: false; error: string };
+
+/**
+ * Turns raw input (typed or read back from storage) into a clean username, or an
+ * error message. Oversized input is rejected before any Unicode processing.
+ */
+export function parseUsername(raw: string): ParsedUsername {
+  if (raw.length > USERNAME_MAX_INPUT_LENGTH) return { ok: false, error: TOO_COMPLEX_MESSAGE };
+  const name = normalizeUsername(raw);
+  const error = validateUsername(name);
+  return error ? { ok: false, error } : { ok: true, name };
 }

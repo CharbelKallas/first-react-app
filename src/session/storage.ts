@@ -1,4 +1,4 @@
-import { normalizeUsername, validateUsername } from './username';
+import { parseUsername } from './username';
 
 export const USERNAME_STORAGE_KEY = 'first-react-app:username';
 
@@ -11,8 +11,8 @@ export function loadUsername(): string {
   try {
     const stored = window.sessionStorage.getItem(USERNAME_STORAGE_KEY);
     if (stored === null) return '';
-    const name = normalizeUsername(stored);
-    return validateUsername(name) === null ? name : '';
+    const parsed = parseUsername(stored);
+    return parsed.ok ? parsed.name : '';
   } catch {
     return '';
   }

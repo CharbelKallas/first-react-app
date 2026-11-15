@@ -6,6 +6,7 @@ import App from './App';
 import AppRoutes from './router/AppRoutes';
 import { UserProvider } from './session/UserProvider';
 import { USERNAME_STORAGE_KEY } from './session/storage';
+import { USERNAME_MAX_INPUT_LENGTH } from './session/username';
 
 function LocationProbe() {
   const location = useLocation();
@@ -74,6 +75,11 @@ describe('log in flow', () => {
     await user.type(input, '    {Enter}');
     expect(location()).toBe('/welcome');
     expect(window.sessionStorage.getItem(USERNAME_STORAGE_KEY)).toBeNull();
+  });
+
+  it('limits how much text the field accepts', () => {
+    renderAt('/welcome');
+    expect(screen.getByLabelText(/username/i)).toHaveAttribute('maxlength', String(USERNAME_MAX_INPUT_LENGTH));
   });
 
   it('clears the error once the user edits the name', async () => {
