@@ -33,7 +33,13 @@ const NOT_ALLOWED_CHAR = /[^\p{L}\p{M}\p{N}\p{P}\p{S} ]/u;
 // variation selectors. The emoji/text style selectors U+FE0E/U+FE0F are allowed
 // only directly after an emoji or a keycap base, where they have a visible effect.
 const INVISIBLE_MARK = /[\u034F\u17B4\u17B5\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/u;
-const EMOJI_STYLE_SELECTOR = /(?<=[\p{Extended_Pictographic}0-9#*])\uFE0E|(?<=[\p{Extended_Pictographic}\p{Emoji_Modifier}0-9#*])\uFE0F/gu;
+const EMOJI_STYLE_SELECTOR = /(?<=\p{Extended_Pictographic})[\uFE0E\uFE0F]|(?<=[0-9#*])\uFE0F(?=\u20E3)/gu;
+
+// Selectors that change nothing on screen are removed during normalization, so
+// lookalike spellings of the same name are stored the same way: U+FE0F after an
+// emoji that is already shown in emoji style (or after a skin tone), and after a
+// digit, '#' or '*' that is not part of a keycap.
+const REDUNDANT_EMOJI_SELECTOR = /(?<=[\p{Emoji_Presentation}\p{Emoji_Modifier}])\uFE0F|(?<=[0-9#*])\uFE0F(?!\u20E3)/gu;
 
 // Letters and symbols that render as empty space: Hangul fillers and the blank
 // Braille pattern, a common way to fake a blank or lookalike name.
@@ -74,19 +80,36 @@ const EMOJI_FLAG_TAGS = new RegExp(
 
 let graphemeSegmenter: Intl.Segmenter | undefined;
 
-// Code points that never start a new user-perceived character: combining marks,
-// zero-width joiners, skin tones and flag tag characters.
+// Fallback for browsers without Intl.Segmenter: drop every code point that
+// joins the previous character instead of starting a new one.
+// - a regional-indicator pair is one flag;
+const REGIONAL_INDICATOR_PAIR = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
+// - whatever follows a zero-width joiner is part of the same emoji;
+const AFTER_JOINER = /(?<=\u200D)[^\u200D]/gu;
+// - a letter after an Indic virama (linker) forms a conjunct with the one before;
+const AFTER_CONJUNCT_LINKER = /(?<=[\u094D\u09CD\u0ACD\u0B4D\u0C4D\u0D4D]\p{M}*)\p{L}/gu;
+// - Hangul vowel and final jamo attach to the syllable before them;
+const HANGUL_TRAILING_JAMO = /[\u1160-\u11FF\uD7B0-\uD7FF]/gu;
+// - marks, joiners, skin tones and flag tag characters never start a character.
 const NON_STARTER = /[\p{M}\u200D\p{Emoji_Modifier}\u{E0020}-\u{E007F}]/gu;
 
 /**
  * Number of user-perceived characters (a joined emoji or flag counts as one).
  * Intl.Segmenter is missing in some supported browsers (Firefox before 125), so
- * it is created on first use. Without it, code points that cannot start a new
- * character are ignored, which is close to what users see (a joined emoji counts
- * once per part) and never rejects a name that real segmentation would accept.
+ * it is created on first use. Without it, an approximation is used that may
+ * count fewer characters than real segmentation but never more, so it never
+ * rejects a name that other browsers accept; the code-point cap still applies.
  */
 function visibleLength(text: string): number {
-  if (typeof Intl.Segmenter !== 'function') return [...text.replace(NON_STARTER, '')].length;
+  if (typeof Intl.Segmenter !== 'function') {
+    const starters = text
+      .replace(REGIONAL_INDICATOR_PAIR, 'F')
+      .replace(AFTER_JOINER, '')
+      .replace(AFTER_CONJUNCT_LINKER, '')
+      .replace(HANGUL_TRAILING_JAMO, '')
+      .replace(NON_STARTER, '');
+    return [...starters].length;
+  }
   graphemeSegmenter ??= new Intl.Segmenter(undefined, { granularity: 'grapheme' });
   return Array.from(graphemeSegmenter.segment(text)).length;
 }
@@ -100,11 +123,16 @@ function hasTooManyMarks(name: string): boolean {
 }
 
 /**
- * Trim, collapse inner whitespace and use the compatibility-composed Unicode form
- * (NFKC), which also folds lookalikes such as fullwidth letters into plain ones.
+ * Trim, collapse inner whitespace, drop emoji selectors that change nothing, and
+ * use the compatibility-composed Unicode form (NFKC), which also folds lookalikes
+ * such as fullwidth letters into plain ones.
  */
 export function normalizeUsername(raw: string): string {
-  return raw.normalize('NFKC').replace(/\s+/gu, ' ').trim();
+  return raw
+    .normalize('NFKC')
+    .replace(REDUNDANT_EMOJI_SELECTOR, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
 }
 
 /**

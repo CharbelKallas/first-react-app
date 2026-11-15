@@ -15,6 +15,16 @@ describe('normalizeUsername', () => {
     expect(normalizeUsername('   Ada \t  Lovelace \n')).toBe('Ada Lovelace');
   });
 
+  it('drops emoji selectors that change nothing on screen', () => {
+    const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+    expect(normalizeUsername('Ada1' + cp(0xfe0f))).toBe('Ada1');
+    expect(normalizeUsername('Ada ' + cp(0x1f600, 0xfe0f))).toBe('Ada ' + cp(0x1f600));
+    expect(normalizeUsername(cp(0x1f44d, 0x1f3fd, 0xfe0f))).toBe(cp(0x1f44d, 0x1f3fd));
+    // Kept where they matter: a text-default heart and a keycap.
+    expect(normalizeUsername(cp(0x2764, 0xfe0f))).toBe(cp(0x2764, 0xfe0f));
+    expect(normalizeUsername(cp(0x31, 0xfe0f, 0x20e3))).toBe(cp(0x31, 0xfe0f, 0x20e3));
+  });
+
   it('folds fullwidth lookalike letters into plain ones', () => {
     const fullwidthAda = String.fromCodePoint(0xff21, 0xff44, 0xff41);
     expect(normalizeUsername(fullwidthAda)).toBe('Ada');
@@ -184,6 +194,10 @@ describe('validateUsername', () => {
     expect(validateUsername(carrier)).toMatch(/not allowed/i);
   });
 
+  it('rejects an emoji selector on a digit that is not a keycap', () => {
+    expect(validateUsername('Ada1' + String.fromCodePoint(0xfe0f))).toMatch(/not allowed/i);
+  });
+
   it('allows emoji and text style selectors only where they are visible', () => {
     const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
     expect(validateUsername('Ada ' + cp(0x2764, 0xfe0f))).toBeNull(); // red heart
@@ -221,6 +235,35 @@ describe('without Intl.Segmenter (Firefox before 125)', () => {
     expect(fresh.validateUsername('a'.repeat(USERNAME_MAX_LENGTH + 1))).toMatch(/at most/i);
     const technologist = String.fromCodePoint(0x1f469, 0x200d, 0x1f4bb);
     expect(fresh.validateUsername(technologist)).toBeNull();
+  });
+
+  it('never counts more characters than Intl.Segmenter does', async () => {
+    const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+    const samples = [
+      'Ada Lovelace',
+      cp(0x1f1fa, 0x1f1f8).repeat(17), // 17 flags
+      cp(0x915, 0x94d, 0x937).repeat(17), // 17 Hindi conjuncts
+      cp(0x915, 0x94d, 0x937, 0x94d, 0x92e, 0x93f), // three-letter conjunct + vowel sign
+      cp(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466), // family
+      cp(0x1f469, 0x1f3fb, 0x200d, 0x2764, 0xfe0f, 0x200d, 0x1f48b, 0x200d, 0x1f468, 0x1f3fc), // kiss
+      cp(0x1f3f4, 0xe0067, 0xe0062, 0xe0073, 0xe0063, 0xe0074, 0xe007f), // Scotland
+      cp(0x1100, 0x1161, 0x11a8, 0x1100, 0x1161), // Hangul jamo
+      'Nguy' + cp(0x65, 0x323, 0x302) + 'n',
+      cp(0xe1b, 0xe31, 0xe49, 0xe19), // Thai
+      cp(0x31, 0xfe0f, 0x20e3), // keycap
+    ];
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+    const realCounts = samples.map((text) => Array.from(segmenter.segment(text)).length);
+
+    Reflect.deleteProperty(Intl, 'Segmenter');
+    vi.resetModules();
+    const fresh = await import('./username');
+    samples.forEach((text, i) => {
+      const accepted = fresh.validateUsername(text) === null;
+      const realCount = realCounts[i] ?? 0;
+      // Every sample is accepted with real segmentation, so the fallback must accept it too.
+      expect([i, realCount <= USERNAME_MAX_LENGTH, accepted]).toEqual([i, true, true]);
+    });
   });
 
   it('does not count accents and joiners towards the limit', async () => {

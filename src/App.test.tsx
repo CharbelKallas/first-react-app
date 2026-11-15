@@ -77,9 +77,14 @@ describe('log in flow', () => {
     expect(window.sessionStorage.getItem(USERNAME_STORAGE_KEY)).toBeNull();
   });
 
-  it('limits how much text the field accepts', () => {
-    renderAt('/welcome');
-    expect(screen.getByLabelText(/username/i)).toHaveAttribute('maxlength', String(USERNAME_MAX_INPUT_LENGTH));
+  it('shows an error instead of silently cutting an oversized paste', async () => {
+    const { user, location } = renderAt('/welcome');
+    await user.click(screen.getByLabelText(/username/i));
+    await user.paste('Ada' + ' '.repeat(USERNAME_MAX_INPUT_LENGTH) + 'Smith');
+    await user.keyboard('{Enter}');
+
+    expect(location()).toBe('/welcome');
+    expect(screen.getByRole('alert')).toHaveTextContent(/too long/i);
   });
 
   it('clears the error once the user edits the name', async () => {
