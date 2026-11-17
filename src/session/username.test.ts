@@ -217,65 +217,59 @@ describe('validateUsername', () => {
   });
 });
 
-describe('without Intl.Segmenter (Firefox before 125)', () => {
+describe('the same answer in every browser', () => {
   const original = Intl.Segmenter;
+  const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+  const samples = [
+    'Ada',
+    'a'.repeat(USERNAME_MAX_LENGTH + 1),
+    cp(0x915, 0x94d, 0x937).repeat(20), // 20 Hindi conjuncts (one character each)
+    cp(0x1f1fa, 0x1f1f8).repeat(17), // 17 flags
+    'Ada ' + cp(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466), // family
+    cp(0x1100, 0x1161, 0x11a8).repeat(20), // 20 Hangul syllables typed as jamo
+    cp(0xd4e, 0xd30).repeat(17), // 17 Malayalam dot-reph letters
+  ];
 
   afterEach(() => {
     Object.defineProperty(Intl, 'Segmenter', { value: original, configurable: true, writable: true });
     vi.resetModules();
   });
 
-  it('loads the module and falls back to counting code points', async () => {
+  it('counts joined characters as one, whatever the browser supports', () => {
+    expect(samples.map(validateUsername)).toEqual([
+      null,
+      expect.stringMatching(/at most/i),
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it('ignores the browser segmenter, so its Unicode version cannot change results', async () => {
+    const withRealSegmenter = samples.map(validateUsername);
+    // A segmenter from an older Unicode version that splits everything per code point.
+    class OldSegmenter {
+      segment(text: string) {
+        return [...text].map((segment) => ({ segment }));
+      }
+    }
+    Object.defineProperty(Intl, 'Segmenter', { value: OldSegmenter, configurable: true, writable: true });
+    vi.resetModules();
+
+    const fresh = await import('./username');
+    expect(samples.map(fresh.validateUsername)).toEqual(withRealSegmenter);
+  });
+
+  it('gives identical results without Intl.Segmenter (Firefox before 125)', async () => {
+    const withSegmenter = samples.map(validateUsername);
     Reflect.deleteProperty(Intl, 'Segmenter');
     expect(typeof Intl.Segmenter).toBe('undefined');
     vi.resetModules();
 
     const fresh = await import('./username');
-    expect(fresh.validateUsername('Ada')).toBeNull();
-    expect(fresh.validateUsername('a'.repeat(USERNAME_MAX_LENGTH + 1))).toMatch(/at most/i);
-    const technologist = String.fromCodePoint(0x1f469, 0x200d, 0x1f4bb);
-    expect(fresh.validateUsername(technologist)).toBeNull();
-  });
-
-  it('never counts more characters than Intl.Segmenter does', async () => {
-    const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
-    const samples = [
-      'Ada Lovelace',
-      cp(0x1f1fa, 0x1f1f8).repeat(17), // 17 flags
-      cp(0x915, 0x94d, 0x937).repeat(17), // 17 Hindi conjuncts
-      cp(0x915, 0x94d, 0x937, 0x94d, 0x92e, 0x93f), // three-letter conjunct + vowel sign
-      cp(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466), // family
-      cp(0x1f469, 0x1f3fb, 0x200d, 0x2764, 0xfe0f, 0x200d, 0x1f48b, 0x200d, 0x1f468, 0x1f3fc), // kiss
-      cp(0x1f3f4, 0xe0067, 0xe0062, 0xe0073, 0xe0063, 0xe0074, 0xe007f), // Scotland
-      cp(0x1100, 0x1161, 0x11a8, 0x1100, 0x1161), // Hangul jamo
-      'Nguy' + cp(0x65, 0x323, 0x302) + 'n',
-      cp(0xe1b, 0xe31, 0xe49, 0xe19), // Thai
-      cp(0x31, 0xfe0f, 0x20e3), // keycap
-    ];
-    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-    const realCounts = samples.map((text) => Array.from(segmenter.segment(text)).length);
-
-    Reflect.deleteProperty(Intl, 'Segmenter');
-    vi.resetModules();
-    const fresh = await import('./username');
-    samples.forEach((text, i) => {
-      const accepted = fresh.validateUsername(text) === null;
-      const realCount = realCounts[i] ?? 0;
-      // Every sample is accepted with real segmentation, so the fallback must accept it too.
-      expect([i, realCount <= USERNAME_MAX_LENGTH, accepted]).toEqual([i, true, true]);
-    });
-  });
-
-  it('does not count accents and joiners towards the limit', async () => {
-    Reflect.deleteProperty(Intl, 'Segmenter');
-    vi.resetModules();
-    const fresh = await import('./username');
-
-    // 11 Hindi conjuncts: 11 characters on screen, 33 code points.
-    const conjunct = String.fromCodePoint(0x915, 0x94d, 0x937);
-    expect(fresh.validateUsername(conjunct.repeat(11))).toBeNull();
-    const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466);
-    expect(fresh.validateUsername('Ada ' + family)).toBeNull();
+    expect(samples.map(fresh.validateUsername)).toEqual(withSegmenter);
   });
 });
 

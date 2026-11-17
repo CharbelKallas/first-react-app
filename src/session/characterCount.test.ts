@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { countCharacters, fallbackCharacterCount } from './characterCount';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { countCharacters } from './characterCount';
 
 const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+// Intl.Segmenter (with the Unicode data bundled with Node) is the reference.
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 const realCount = (text: string) => Array.from(segmenter.segment(text)).length;
 
@@ -35,18 +36,18 @@ const POOL = [
   cp(0x5c71), cp(0x5e9), cp(0x5bc), // CJK, Hebrew letter + dagesh
 ];
 
-describe('fallbackCharacterCount', () => {
+describe('countCharacters', () => {
   it('never counts more characters than Intl.Segmenter (randomized)', () => {
     const random = mulberry32(20261115);
     for (let i = 0; i < 20_000; i += 1) {
       const length = 1 + Math.floor(random() * 12);
       let text = '';
       for (let j = 0; j < length; j += 1) text += POOL[Math.floor(random() * POOL.length)];
-      const fallback = fallbackCharacterCount(text);
+      const counted = countCharacters(text);
       const real = realCount(text);
-      if (fallback > real) {
+      if (counted > real) {
         const codePoints = [...text].map((c) => c.codePointAt(0)?.toString(16)).join(' ');
-        expect.fail(`fallback counted ${fallback} > ${real} for [${codePoints}]`);
+        expect.fail(`counted ${counted} > ${real} for [${codePoints}]`);
       }
     }
   });
@@ -62,12 +63,25 @@ describe('fallbackCharacterCount', () => {
     ['Malayalam dot reph', cp(0xd4e, 0xd30, 0xd4e, 0xd30)],
     ['Hangul jamo', cp(0x1100, 0x1100, 0x1161, 0x11a8)],
   ])('matches Intl.Segmenter exactly for %s', (_label, text) => {
-    expect(fallbackCharacterCount(text)).toBe(realCount(text));
+    expect(countCharacters(text)).toBe(realCount(text));
   });
 });
 
-describe('countCharacters', () => {
-  it('uses Intl.Segmenter when available', () => {
-    expect(countCharacters(cp(0x1f1fa, 0x1f1f8) + 'a')).toBe(2);
+describe('in browsers without Intl.Segmenter', () => {
+  const original = Intl.Segmenter;
+
+  afterEach(() => {
+    Object.defineProperty(Intl, 'Segmenter', { value: original, configurable: true, writable: true });
+    vi.resetModules();
+  });
+
+  it('loads and gives the same counts (it never uses Intl.Segmenter)', async () => {
+    const samples = ['Ada', cp(0x915, 0x94d, 0x937).repeat(20), cp(0x1f1fa, 0x1f1f8, 0x1f44d, 0x1f3fd)];
+    const withSegmenter = samples.map(countCharacters);
+
+    Reflect.deleteProperty(Intl, 'Segmenter');
+    vi.resetModules();
+    const fresh = await import('./characterCount');
+    expect(samples.map(fresh.countCharacters)).toEqual(withSegmenter);
   });
 });

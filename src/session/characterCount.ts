@@ -1,24 +1,18 @@
 // Counting user-perceived characters ("grapheme clusters"): a joined emoji, a
 // flag or a letter with its accents counts as one.
-
-let graphemeSegmenter: Intl.Segmenter | undefined;
-
-/**
- * Number of user-perceived characters in `text`. Uses Intl.Segmenter when the
- * browser has it (created on first use, so the module loads everywhere) and
- * {@link fallbackCharacterCount} otherwise (Firefox before 125).
- */
-export function countCharacters(text: string): number {
-  if (typeof Intl.Segmenter !== 'function') return fallbackCharacterCount(text);
-  graphemeSegmenter ??= new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-  return Array.from(graphemeSegmenter.segment(text)).length;
-}
+//
+// This is a small, deterministic implementation of the joining rules from Unicode
+// UAX #29 instead of Intl.Segmenter. Intl.Segmenter is missing in some supported
+// browsers (Firefox before 125), and where it exists its results depend on the
+// browser's Unicode version (for example, whether Indic conjuncts count as one
+// character), so the same name could be accepted in one browser and rejected in
+// another. This counter gives the same answer everywhere.
 
 // Code points that never start a character: marks, other grapheme extenders,
 // skin tones and zero-width joiners.
 const EXTENDER = `\\p{M}\\p{Grapheme_Extend}\\p{Emoji_Modifier}\\u200D`;
 
-// The fallback removes every code point that joins a neighbouring character
+// The counter removes every code point that joins a neighbouring character
 // instead of starting a new one (rules from Unicode UAX #29), then counts the rest.
 // - a regional-indicator pair is one flag;
 const REGIONAL_INDICATOR_PAIR = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
@@ -39,11 +33,12 @@ const HANGUL_TRAILING_JAMO = /[\u1160-\u11FF\uD7B0-\uD7FF]/gu;
 const NON_STARTER = new RegExp(`[${EXTENDER}]`, 'gu');
 
 /**
- * Approximate character count without Intl.Segmenter. It may count fewer
- * characters than real segmentation (it is lenient about rare sequences) but
- * never more, so it never rejects a name that other browsers accept.
+ * Number of user-perceived characters in `text`. Compared with current Unicode
+ * segmentation it may count fewer characters for rare sequences (it is lenient)
+ * but never more, so it never rejects a name a modern browser would count as
+ * short enough.
  */
-export function fallbackCharacterCount(text: string): number {
+export function countCharacters(text: string): number {
   const starters = text
     // Order matters: rules that look at a neighbour run before the joiner rule
     // removes that neighbour.
