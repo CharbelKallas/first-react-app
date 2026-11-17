@@ -155,8 +155,8 @@ describe('validateUsername', () => {
       // Vietnamese "Nguyen" typed with decomposed accents.
       vietnamese: 'Nguy' + name(0x65, 0x323, 0x302) + 'n',
       keycap: '1' + name(0xfe0f, 0x20e3),
-      // Persian "Mohammadreza" with a zero-width non-joiner between its parts.
-      persian: name(0x645, 0x62d, 0x645, 0x62f, 0x200c, 0x631, 0x636, 0x627),
+      // Persian "Ali-Akbar": the non-joiner after yeh visibly separates the parts.
+      persian: name(0x639, 0x644, 0x6cc, 0x200c, 0x627, 0x6a9, 0x628, 0x631),
       // Marathi eyelash ra: ra + virama + zero-width joiner.
       marathi: name(0x915, 0x930, 0x94d, 0x200d, 0x92f, 0x93e),
       // Hindi half form forced with a zero-width joiner.
@@ -182,6 +182,7 @@ describe('validateUsername', () => {
       persian + zwnj, // at the end
       zwnj + persian, // at the start
       persian + zwnj + 'a', // before a Latin letter
+      cp(0x661) + zwnj + cp(0x662), // between Arabic-Indic digits
       'Ad' + zwj + 'a', // joiner between Latin letters
       cp(0x915) + zwj + cp(0x937), // joiner without a virama
       cp(0x915, 0x94d) + zwj, // joiner after a virama at the end
@@ -191,6 +192,27 @@ describe('validateUsername', () => {
       const codePoints = [...value].map((c) => c.codePointAt(0)?.toString(16)).join(' ');
       expect([codePoints, validateUsername(value)]).toEqual([codePoints, expect.stringMatching(/not allowed/i)]);
     }
+  });
+
+  it('drops joiners that change nothing on screen, keeping meaningful ones', () => {
+    const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+    const zwnj = cp(0x200c);
+    const zwj = cp(0x200d);
+    // Removed: nothing would connect or form a conjunct anyway.
+    const mohammad = cp(0x645, 0x62d, 0x645, 0x62f); // ends in dal, which never joins left
+    const reza = cp(0x631, 0x636, 0x627);
+    expect(normalizeUsername(mohammad + zwnj + reza)).toBe(mohammad + reza);
+    expect(normalizeUsername(cp(0x627) + zwnj + cp(0x628))).toBe(cp(0x627, 0x628)); // after alef
+    expect(normalizeUsername(cp(0x628) + zwnj + cp(0x621))).toBe(cp(0x628, 0x621)); // before hamza
+    expect(normalizeUsername(cp(0x915) + zwnj + cp(0x937))).toBe(cp(0x915, 0x937)); // no virama
+    expect(normalizeUsername(cp(0xb95, 0xbcd) + zwj + cp(0xbb7))).toBe(cp(0xb95, 0xbcd, 0xbb7)); // Tamil
+    // Kept: each one changes what is drawn.
+    const aliAkbar = cp(0x639, 0x644, 0x6cc) + zwnj + cp(0x627, 0x6a9, 0x628, 0x631);
+    const halfForm = cp(0x915, 0x94d) + zwj + cp(0x937);
+    const noConjunct = cp(0x915, 0x94d) + zwnj + cp(0x937);
+    for (const value of [aliAkbar, halfForm, noConjunct]) expect(normalizeUsername(value)).toBe(value);
+    // Both spellings of the same visible name are stored the same way.
+    expect(parseUsername(mohammad + zwnj + reza)).toEqual(parseUsername(mohammad + reza));
   });
 
   it('rejects private-use and unassigned characters', () => {
