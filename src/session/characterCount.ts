@@ -19,10 +19,10 @@ const REGIONAL_INDICATOR_PAIR = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
 // - whatever follows a zero-width joiner is part of the same emoji;
 const AFTER_JOINER = /(?<=\u200D)[^\u200D]/gu;
 // - a letter after an Indic virama (conjunct linker) joins the letter before it;
-const AFTER_CONJUNCT_LINKER = new RegExp(
-  `(?<=[\\u094D\\u09CD\\u0ACD\\u0B4D\\u0C4D\\u0D4D][${EXTENDER}]*)\\p{L}`,
-  'gu',
-);
+// Viramas that link consonants into one conjunct (Devanagari, Bengali, Gujarati,
+// Oriya, Telugu, Malayalam).
+const CONJUNCT_LINKERS = `\\u094D\\u09CD\\u0ACD\\u0B4D\\u0C4D\\u0D4D`;
+const AFTER_CONJUNCT_LINKER = new RegExp(`(?<=[${CONJUNCT_LINKERS}][${EXTENDER}]*)\\p{L}`, 'gu');
 // - "Prepend" characters (such as the Malayalam dot reph) join the next character;
 const PREPEND = /[\u0600-\u0605\u06DD\u070F\u0890\u0891\u08E2\u0D4E\u{110BD}\u{110CD}\u{111C2}\u{111C3}\u{1193F}\u{11941}\u{11A3A}\u{11A84}-\u{11A89}\u{11D46}\u{11F02}]/gu;
 // - a Hangul initial consonant joins a following initial or syllable, and vowel
@@ -50,4 +50,17 @@ export function countCharacters(text: string): number {
     .replace(AFTER_JOINER, '')
     .replace(NON_STARTER, '');
   return [...starters].length;
+}
+
+// Real conjuncts link at most five consonants (Sanskrit clusters such as
+// r-t-s-n-y); a longer chain counts as one character but shows many letters.
+export const MAX_CONJUNCT_CONSONANTS = 5;
+const LONG_CONJUNCT = new RegExp(
+  `(?:\\p{L}(?:(?![${CONJUNCT_LINKERS}])\\p{M})*[${CONJUNCT_LINKERS}][\\p{M}\\u200D]*){${MAX_CONJUNCT_CONSONANTS},}\\p{L}`,
+  'u',
+);
+
+/** True when `text` contains a conjunct of more than MAX_CONJUNCT_CONSONANTS consonants. */
+export function hasOverlongConjunct(text: string): boolean {
+  return LONG_CONJUNCT.test(text);
 }

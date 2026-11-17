@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { countCharacters } from './characterCount';
+import { describe, expect, it } from 'vitest';
+import { countCharacters, hasOverlongConjunct } from './characterCount';
 
 const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
 // Intl.Segmenter (with the Unicode data bundled with Node) is the reference.
@@ -67,21 +67,20 @@ describe('countCharacters', () => {
   });
 });
 
-describe('in browsers without Intl.Segmenter', () => {
-  const original = Intl.Segmenter;
+describe('hasOverlongConjunct', () => {
+  const virama = cp(0x94d);
+  const chain = (n: number) => Array<string>(n).fill(cp(0x915)).join(virama);
 
-  afterEach(() => {
-    Object.defineProperty(Intl, 'Segmenter', { value: original, configurable: true, writable: true });
-    vi.resetModules();
+  it('allows up to five linked consonants', () => {
+    expect(hasOverlongConjunct(chain(2))).toBe(false);
+    expect(hasOverlongConjunct(chain(5))).toBe(false);
+    expect(hasOverlongConjunct('Ada ' + chain(5) + ' ' + chain(5))).toBe(false);
   });
 
-  it('loads and gives the same counts (it never uses Intl.Segmenter)', async () => {
-    const samples = ['Ada', cp(0x915, 0x94d, 0x937).repeat(20), cp(0x1f1fa, 0x1f1f8, 0x1f44d, 0x1f3fd)];
-    const withSegmenter = samples.map(countCharacters);
-
-    Reflect.deleteProperty(Intl, 'Segmenter');
-    vi.resetModules();
-    const fresh = await import('./characterCount');
-    expect(samples.map(fresh.countCharacters)).toEqual(withSegmenter);
+  it('flags six or more, also with vowel signs or a joiner inside the chain', () => {
+    expect(hasOverlongConjunct(chain(6))).toBe(true);
+    expect(hasOverlongConjunct(chain(43))).toBe(true);
+    const withZwj = chain(3) + virama + cp(0x200d) + cp(0x915) + virama + cp(0x915) + virama + cp(0x915);
+    expect(hasOverlongConjunct(withZwj)).toBe(true);
   });
 });

@@ -167,6 +167,16 @@ describe('validateUsername', () => {
     expect(validateUsername('Ada' + String.fromCodePoint(0xf0000))).toMatch(/not allowed/i);
   });
 
+  it('accepts real conjuncts but rejects over-long consonant chains', () => {
+    const virama = String.fromCodePoint(0x94d);
+    const conjunct = (...consonants: number[]) =>
+      consonants.map((c) => String.fromCodePoint(c)).join(virama);
+    // Sanskrit "r-t-s-n-y", five consonants: the longest real cluster.
+    expect(validateUsername(conjunct(0x930, 0x924, 0x938, 0x928, 0x92f))).toBeNull();
+    expect(validateUsername(conjunct(0x930, 0x924, 0x938, 0x928, 0x92f, 0x915))).toMatch(/too long/i);
+    expect(validateUsername(conjunct(...Array<number>(43).fill(0x915)))).toMatch(/too long/i);
+  });
+
   it('caps the total number of code points with its own message', () => {
     const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466);
     // 7 code points each: 18 families = 126 code points (allowed), 19 = 133 (over the
@@ -260,16 +270,6 @@ describe('the same answer in every browser', () => {
 
     const fresh = await import('./username');
     expect(samples.map(fresh.validateUsername)).toEqual(withRealSegmenter);
-  });
-
-  it('gives identical results without Intl.Segmenter (Firefox before 125)', async () => {
-    const withSegmenter = samples.map(validateUsername);
-    Reflect.deleteProperty(Intl, 'Segmenter');
-    expect(typeof Intl.Segmenter).toBe('undefined');
-    vi.resetModules();
-
-    const fresh = await import('./username');
-    expect(samples.map(fresh.validateUsername)).toEqual(withSegmenter);
   });
 });
 

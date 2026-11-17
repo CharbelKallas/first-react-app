@@ -1,4 +1,4 @@
-import { countCharacters } from './characterCount';
+import { countCharacters, hasOverlongConjunct } from './characterCount';
 
 export const USERNAME_MAX_LENGTH = 32;
 
@@ -108,7 +108,9 @@ export function normalizeUsername(raw: string): string {
 export function validateUsername(name: string): string | null {
   if (!VISIBLE_CHAR.test(name)) return EMPTY_MESSAGE;
   if (countCharacters(name) > USERNAME_MAX_LENGTH) return TOO_LONG_MESSAGE;
-  if ([...name].length > USERNAME_MAX_CODE_POINTS) return TOO_COMPLEX_MESSAGE;
+  if ([...name].length > USERNAME_MAX_CODE_POINTS || hasOverlongConjunct(name)) {
+    return TOO_COMPLEX_MESSAGE;
+  }
   if (LONG_EMOJI_CHAIN.test(name)) return NOT_ALLOWED_MESSAGE;
   const withoutEmojiFormatting = name
     .replace(EMOJI_JOINER, '')
