@@ -177,6 +177,14 @@ describe('validateUsername', () => {
     expect(validateUsername(conjunct(...Array<number>(43).fill(0x915)))).toMatch(/too long/i);
   });
 
+  it('explains an over-long cluster in its own words, even disguised with skin tones', () => {
+    const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+    const disguised = cp(0x915, 0x94d, 0x1f3fb).repeat(31) + cp(0x915);
+    const result = parseUsername(disguised);
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/cluster of joined letters/i) });
+    expect(result).not.toEqual({ ok: false, error: expect.stringMatching(/emoji/i) });
+  });
+
   it('caps the total number of code points with its own message', () => {
     const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466);
     // 7 code points each: 18 families = 126 code points (allowed), 19 = 133 (over the

@@ -16,6 +16,7 @@ const EMPTY_MESSAGE = 'Please enter a username.';
 const TOO_LONG_MESSAGE = `Username must be at most ${USERNAME_MAX_LENGTH} characters.`;
 const TOO_COMPLEX_MESSAGE = 'Username is too long. Try fewer emoji or accents.';
 const TOO_MANY_MARKS_MESSAGE = 'Username has too many accent marks.';
+const LONG_CLUSTER_MESSAGE = 'Username has a cluster of joined letters that is too long.';
 const NOT_ALLOWED_MESSAGE = 'Username contains characters that are not allowed.';
 
 // At least one letter, digit, punctuation mark or symbol, so empty input and a
@@ -108,9 +109,8 @@ export function normalizeUsername(raw: string): string {
 export function validateUsername(name: string): string | null {
   if (!VISIBLE_CHAR.test(name)) return EMPTY_MESSAGE;
   if (countCharacters(name) > USERNAME_MAX_LENGTH) return TOO_LONG_MESSAGE;
-  if ([...name].length > USERNAME_MAX_CODE_POINTS || hasOverlongConjunct(name)) {
-    return TOO_COMPLEX_MESSAGE;
-  }
+  if ([...name].length > USERNAME_MAX_CODE_POINTS) return TOO_COMPLEX_MESSAGE;
+  if (hasOverlongConjunct(name)) return LONG_CLUSTER_MESSAGE;
   if (LONG_EMOJI_CHAIN.test(name)) return NOT_ALLOWED_MESSAGE;
   const withoutEmojiFormatting = name
     .replace(EMOJI_JOINER, '')

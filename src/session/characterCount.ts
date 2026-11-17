@@ -54,9 +54,11 @@ export function countCharacters(text: string): number {
 
 // Real conjuncts link at most five consonants (Sanskrit clusters such as
 // r-t-s-n-y); a longer chain counts as one character but shows many letters.
+// Built from the same EXTENDER and CONJUNCT_LINKERS classes the counter uses, so
+// any chain the counter joins into one character is also checked here.
 export const MAX_CONJUNCT_CONSONANTS = 5;
 const LONG_CONJUNCT = new RegExp(
-  `(?:\\p{L}(?:(?![${CONJUNCT_LINKERS}])\\p{M})*[${CONJUNCT_LINKERS}][\\p{M}\\u200D]*){${MAX_CONJUNCT_CONSONANTS},}\\p{L}`,
+  `(?:\\p{L}(?:(?![${CONJUNCT_LINKERS}])[${EXTENDER}])*[${CONJUNCT_LINKERS}][${EXTENDER}]*){${MAX_CONJUNCT_CONSONANTS},}\\p{L}`,
   'u',
 );
 

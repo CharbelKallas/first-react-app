@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countCharacters, hasOverlongConjunct } from './characterCount';
+import { MAX_CONJUNCT_CONSONANTS, countCharacters, hasOverlongConjunct } from './characterCount';
 
 const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
 // Intl.Segmenter (with the Unicode data bundled with Node) is the reference.
@@ -75,6 +75,29 @@ describe('hasOverlongConjunct', () => {
     expect(hasOverlongConjunct(chain(2))).toBe(false);
     expect(hasOverlongConjunct(chain(5))).toBe(false);
     expect(hasOverlongConjunct('Ada ' + chain(5) + ' ' + chain(5))).toBe(false);
+  });
+
+  it('agrees with countCharacters for chains with any joining characters inside (randomized)', () => {
+    // Characters the counter treats as part of the cluster: an accent, a vowel
+    // sign, a skin tone, a zero-width joiner, a halfwidth sound mark, a selector.
+    const extenders = [cp(0x301), cp(0x93f), cp(0x1f3fb), cp(0x200d), cp(0xff9e), cp(0xfe0f)];
+    const random = mulberry32(7);
+    const pick = () => extenders[Math.floor(random() * extenders.length)] ?? '';
+    const sprinkle = () => Array.from({ length: Math.floor(random() * 3) }, pick).join('');
+    for (let i = 0; i < 2_000; i += 1) {
+      const consonants = 1 + Math.floor(random() * 10);
+      let text = cp(0x915);
+      for (let c = 1; c < consonants; c += 1) text += sprinkle() + virama + sprinkle() + cp(0x915);
+      const label = `${consonants} consonants: [${[...text].map((ch) => ch.codePointAt(0)?.toString(16)).join(' ')}]`;
+      expect([label, countCharacters(text)]).toEqual([label, 1]);
+      expect([label, hasOverlongConjunct(text)]).toEqual([label, consonants > MAX_CONJUNCT_CONSONANTS]);
+    }
+  });
+
+  it('flags a chain with a skin tone after every link', () => {
+    const disguised = (cp(0x915) + virama + cp(0x1f3fb)).repeat(31) + cp(0x915);
+    expect(countCharacters(disguised)).toBe(1);
+    expect(hasOverlongConjunct(disguised)).toBe(true);
   });
 
   it('flags six or more, also with vowel signs or a joiner inside the chain', () => {
