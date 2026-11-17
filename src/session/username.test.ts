@@ -155,9 +155,41 @@ describe('validateUsername', () => {
       // Vietnamese "Nguyen" typed with decomposed accents.
       vietnamese: 'Nguy' + name(0x65, 0x323, 0x302) + 'n',
       keycap: '1' + name(0xfe0f, 0x20e3),
+      // Persian "Mohammadreza" with a zero-width non-joiner between its parts.
+      persian: name(0x645, 0x62d, 0x645, 0x62f, 0x200c, 0x631, 0x636, 0x627),
+      // Marathi eyelash ra: ra + virama + zero-width joiner.
+      marathi: name(0x915, 0x930, 0x94d, 0x200d, 0x92f, 0x93e),
+      // Hindi half form forced with a zero-width joiner.
+      hindiHalfForm: name(0x915, 0x94d, 0x200d, 0x937),
+      // Sinhala "Sri" written with a zero-width joiner.
+      sinhala: name(0xdc1, 0xdca, 0x200d, 0xdbb, 0xdd3),
+      // Hindi word kept from forming a conjunct with a zero-width non-joiner.
+      hindiNonJoiner: name(0x915, 0x94d, 0x200c, 0x937),
     };
     for (const [script, value] of Object.entries(realNames)) {
       expect([script, validateUsername(normalizeUsername(value))]).toEqual([script, null]);
+    }
+  });
+
+  it('rejects zero-width (non-)joiners where they are invisible', () => {
+    const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+    const zwnj = cp(0x200c);
+    const zwj = cp(0x200d);
+    const persian = cp(0x645, 0x62d, 0x645, 0x62f);
+    const cases = [
+      'Ad' + zwnj + 'a', // between Latin letters
+      persian + zwnj + zwnj + cp(0x631), // doubled
+      persian + zwnj, // at the end
+      zwnj + persian, // at the start
+      persian + zwnj + 'a', // before a Latin letter
+      'Ad' + zwj + 'a', // joiner between Latin letters
+      cp(0x915) + zwj + cp(0x937), // joiner without a virama
+      cp(0x915, 0x94d) + zwj, // joiner after a virama at the end
+      cp(0x915, 0x94d) + zwj + zwj + cp(0x937), // doubled joiner
+    ];
+    for (const value of cases) {
+      const codePoints = [...value].map((c) => c.codePointAt(0)?.toString(16)).join(' ');
+      expect([codePoints, validateUsername(value)]).toEqual([codePoints, expect.stringMatching(/not allowed/i)]);
     }
   });
 

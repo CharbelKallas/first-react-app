@@ -27,8 +27,8 @@ const VISIBLE_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u;
 // punctuation, symbol or a plain space. This excludes control and format
 // characters (zero-width spaces, direction marks, BOM, tag characters...),
 // private-use characters (which render differently on each device) and code
-// points Unicode has not assigned yet. Emoji joiners and flag tags are removed
-// before this check when they are part of a real emoji.
+// points Unicode has not assigned yet. Emoji joiners, flag tags and the script
+// joiners below are removed before this check where they are legitimate.
 const NOT_ALLOWED_CHAR = /[^\p{L}\p{M}\p{N}\p{P}\p{S} ]/u;
 
 // Marks that render as nothing: variation selectors (also usable to hide bytes of
@@ -37,6 +37,32 @@ const NOT_ALLOWED_CHAR = /[^\p{L}\p{M}\p{N}\p{P}\p{S} ]/u;
 // only directly after an emoji or a keycap base, where they have a visible effect.
 const INVISIBLE_MARK = /[\u034F\u17B4\u17B5\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}]/u;
 const EMOJI_STYLE_SELECTOR = /(?<=\p{Extended_Pictographic})[\uFE0E\uFE0F]|(?<=[0-9#*])\uFE0F(?=\u20E3)/gu;
+
+// Zero-width (non-)joiners are spelling characters in some scripts, so they are
+// allowed there and nowhere else:
+// - a non-joiner (U+200C) between two letters of a script that uses it, e.g.
+//   Persian "Mohammad-reza" or an Indic word that must not form a conjunct;
+// - a joiner (U+200D) directly after a virama and before a letter, which asks for
+//   a half form (Hindi) or the eyelash ra (Marathi), or a Sinhala conjunct.
+const ZWNJ_SCRIPTS = [
+  'Arabic',
+  'Syriac',
+  'Devanagari',
+  'Bengali',
+  'Gurmukhi',
+  'Gujarati',
+  'Oriya',
+  'Tamil',
+  'Telugu',
+  'Kannada',
+  'Malayalam',
+  'Sinhala',
+]
+  .map((script) => `\\p{Script=${script}}`)
+  .join('');
+const SCRIPT_ZWNJ = new RegExp(`(?<=[${ZWNJ_SCRIPTS}]\\p{M}*)\\u200C(?=[${ZWNJ_SCRIPTS}])`, 'gu');
+const VIRAMAS = `\\u094D\\u09CD\\u0A4D\\u0ACD\\u0B4D\\u0BCD\\u0C4D\\u0CCD\\u0D4D\\u0DCA`;
+const VIRAMA_ZWJ = new RegExp(`(?<=[${VIRAMAS}])\\u200D(?=\\p{L})`, 'gu');
 
 // Selectors that change nothing on screen are removed during normalization, so
 // lookalike spellings of the same name are stored the same way: U+FE0F after an
@@ -115,7 +141,9 @@ export function validateUsername(name: string): string | null {
   const withoutEmojiFormatting = name
     .replace(EMOJI_JOINER, '')
     .replace(EMOJI_FLAG_TAGS, '')
-    .replace(EMOJI_STYLE_SELECTOR, '');
+    .replace(EMOJI_STYLE_SELECTOR, '')
+    .replace(SCRIPT_ZWNJ, '')
+    .replace(VIRAMA_ZWJ, '');
   if (
     NOT_ALLOWED_CHAR.test(withoutEmojiFormatting) ||
     INVISIBLE_MARK.test(withoutEmojiFormatting) ||
