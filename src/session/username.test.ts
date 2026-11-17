@@ -206,11 +206,17 @@ describe('validateUsername', () => {
     expect(normalizeUsername(cp(0x628) + zwnj + cp(0x621))).toBe(cp(0x628, 0x621)); // before hamza
     expect(normalizeUsername(cp(0x915) + zwnj + cp(0x937))).toBe(cp(0x915, 0x937)); // no virama
     expect(normalizeUsername(cp(0xb95, 0xbcd) + zwj + cp(0xbb7))).toBe(cp(0xb95, 0xbcd, 0xbb7)); // Tamil
+    expect(normalizeUsername(cp(0xb95, 0xbcd) + zwnj + cp(0xb95))).toBe(cp(0xb95, 0xbcd, 0xb95)); // Tamil, no ligature
     // Kept: each one changes what is drawn.
     const aliAkbar = cp(0x639, 0x644, 0x6cc) + zwnj + cp(0x627, 0x6a9, 0x628, 0x631);
     const halfForm = cp(0x915, 0x94d) + zwj + cp(0x937);
     const noConjunct = cp(0x915, 0x94d) + zwnj + cp(0x937);
-    for (const value of [aliAkbar, halfForm, noConjunct]) expect(normalizeUsername(value)).toBe(value);
+    const tamilNoKsha = cp(0xb95, 0xbcd) + zwnj + cp(0xbb7); // stops the k-ssa ligature
+    const tamilNoShri = cp(0xbb8, 0xbcd) + zwnj + cp(0xbb0, 0xbc0); // stops the shri ligature
+    for (const value of [aliAkbar, halfForm, noConjunct, tamilNoKsha, tamilNoShri]) {
+      expect(normalizeUsername(value)).toBe(value);
+      expect(validateUsername(value)).toBeNull();
+    }
     // Both spellings of the same visible name are stored the same way.
     expect(parseUsername(mohammad + zwnj + reza)).toEqual(parseUsername(mohammad + reza));
   });
@@ -229,6 +235,12 @@ describe('validateUsername', () => {
     expect(validateUsername(conjunct(0x930, 0x924, 0x938, 0x928, 0x92f))).toBeNull();
     expect(validateUsername(conjunct(0x930, 0x924, 0x938, 0x928, 0x92f, 0x915))).toMatch(/too long/i);
     expect(validateUsername(conjunct(...Array<number>(43).fill(0x915)))).toMatch(/too long/i);
+  });
+
+  it('accepts many consonants kept apart with virama + non-joiner', () => {
+    const cp = (...codePoints: number[]) => String.fromCodePoint(...codePoints);
+    const keptApart = Array<string>(6).fill(cp(0x915)).join(cp(0x94d, 0x200c));
+    expect(parseUsername(keptApart)).toEqual({ ok: true, name: keptApart });
   });
 
   it('explains an over-long cluster in its own words, even disguised with skin tones', () => {

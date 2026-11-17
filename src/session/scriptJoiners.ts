@@ -48,9 +48,20 @@ const MEANINGFUL_JOINERS = new RegExp(
     `(?<=${ARABIC_LEFT_JOINING_LETTER}\\p{M}*)\\u200C(?=${ARABIC_RIGHT_JOINING_LETTER})`,
     `(?<=[${NON_JOINER_VIRAMAS}])\\u200C(?=${INDIC_LETTER})`,
     `(?<=[${HALF_FORM_VIRAMAS}])\\u200D(?=${INDIC_LETTER})`,
+    // Tamil draws k-ssa and s-r(ii) as ligatures; a non-joiner after the pulli
+    // keeps the letters apart.
+    `(?<=\\u0B95\\u0BCD)\\u200C(?=\\u0BB7)`,
+    `(?<=\\u0BB8\\u0BCD)\\u200C(?=\\u0BB0)`,
   ].join('|'),
   'gu',
 );
+// The same rules anchored at one position, to check a single joiner.
+const MEANINGFUL_JOINER_AT = new RegExp(MEANINGFUL_JOINERS.source, 'uy');
+
+function isMeaningfulAt(text: string, index: number): boolean {
+  MEANINGFUL_JOINER_AT.lastIndex = index;
+  return MEANINGFUL_JOINER_AT.test(text);
+}
 
 const REDUNDANT_JOINERS = new RegExp(
   [
@@ -65,9 +76,15 @@ const REDUNDANT_JOINERS = new RegExp(
   'gu',
 );
 
-/** Removes joiners and non-joiners that have no visible effect in their script. */
+/**
+ * Removes joiners and non-joiners that have no visible effect in their script.
+ * A joiner that a meaningful rule matches is always kept, so the two rule lists
+ * cannot contradict each other.
+ */
 export function removeRedundantJoiners(text: string): string {
-  return text.replace(REDUNDANT_JOINERS, '');
+  return text.replace(REDUNDANT_JOINERS, (joiner: string, offset: number, whole: string) =>
+    isMeaningfulAt(whole, offset) ? joiner : '',
+  );
 }
 
 /** Removes the joiners and non-joiners that are meaningful, so only stray ones remain. */

@@ -13,6 +13,9 @@ import { CONJUNCT_LINKERS } from './scriptJoiners';
 // Code points that never start a character: marks, other grapheme extenders,
 // skin tones and zero-width joiners.
 const EXTENDER = `\\p{M}\\p{Grapheme_Extend}\\p{Emoji_Modifier}\\u200D`;
+// An extender that keeps a conjunct going. The zero-width non-joiner is an
+// extender too, but after a virama it means "do not join", so it ends the conjunct.
+const CONJUNCT_EXTENDER = `(?:(?!\\u200C)[${EXTENDER}])`;
 
 // The counter removes every code point that joins a neighbouring character
 // instead of starting a new one (rules from Unicode UAX #29), then counts the rest.
@@ -21,7 +24,7 @@ const REGIONAL_INDICATOR_PAIR = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
 // - whatever follows a zero-width joiner is part of the same emoji;
 const AFTER_JOINER = /(?<=\u200D)[^\u200D]/gu;
 // - a letter after an Indic virama (conjunct linker) joins the letter before it;
-const AFTER_CONJUNCT_LINKER = new RegExp(`(?<=[${CONJUNCT_LINKERS}][${EXTENDER}]*)\\p{L}`, 'gu');
+const AFTER_CONJUNCT_LINKER = new RegExp(`(?<=[${CONJUNCT_LINKERS}]${CONJUNCT_EXTENDER}*)\\p{L}`, 'gu');
 // - "Prepend" characters (such as the Malayalam dot reph) join the next character;
 const PREPEND = /[\u0600-\u0605\u06DD\u070F\u0890\u0891\u08E2\u0D4E\u{110BD}\u{110CD}\u{111C2}\u{111C3}\u{1193F}\u{11941}\u{11A3A}\u{11A84}-\u{11A89}\u{11D46}\u{11F02}]/gu;
 // - a Hangul initial consonant joins a following initial or syllable, and vowel
@@ -53,11 +56,11 @@ export function countCharacters(text: string): number {
 
 // Real conjuncts link at most five consonants (Sanskrit clusters such as
 // r-t-s-n-y); a longer chain counts as one character but shows many letters.
-// Built from the same EXTENDER and CONJUNCT_LINKERS classes the counter uses, so
+// Built from the same CONJUNCT_EXTENDER and CONJUNCT_LINKERS the counter uses, so
 // any chain the counter joins into one character is also checked here.
 export const MAX_CONJUNCT_CONSONANTS = 5;
 const LONG_CONJUNCT = new RegExp(
-  `(?:\\p{L}(?:(?![${CONJUNCT_LINKERS}])[${EXTENDER}])*[${CONJUNCT_LINKERS}][${EXTENDER}]*){${MAX_CONJUNCT_CONSONANTS},}\\p{L}`,
+  `(?:\\p{L}(?:(?![${CONJUNCT_LINKERS}])${CONJUNCT_EXTENDER})*[${CONJUNCT_LINKERS}]${CONJUNCT_EXTENDER}*){${MAX_CONJUNCT_CONSONANTS},}\\p{L}`,
   'u',
 );
 
