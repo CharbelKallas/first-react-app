@@ -1,46 +1,49 @@
-# Getting Started with Create React App
+# First React App
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A small React + TypeScript single-page app:
 
-## Available Scripts
+1. **`/welcome`**: enter a username (press Enter or click **Log In**).
+2. **`/logged-in`**: shows "Hello *name*" with a **Log Out** button.
 
-In the project directory, you can run:
+`/` sends you to the right page, unknown URLs show a "Page not found" page, and
+`/logged-in` sends you back to `/welcome` if no username has been entered.
+The username is kept in `sessionStorage`, so it survives a page refresh but is
+forgotten when the tab is closed or you log out.
 
-### `npm start`
+> This is **not** authentication. There is no server or password; the "login"
+> only stores a display name in the browser. Do not rely on it to protect anything.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+## Requirements
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+- Node.js 22.22.2+, 24.15+ or 26+ (the versions jsdom and Vitest support).
+  `.nvmrc` pins Node 24; run `nvm use` if you use nvm.
 
-### `npm test`
+## Scripts
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+| Command             | What it does                                              |
+| ------------------- | --------------------------------------------------------- |
+| `npm start`         | Dev server with hot reload at http://localhost:3000       |
+| `npm test`          | Tests in watch mode (Vitest + Testing Library)            |
+| `npm run test:ci`   | Tests once, for CI                                        |
+| `npm run lint`      | ESLint                                                    |
+| `npm run typecheck` | TypeScript type check                                     |
+| `npm run build`     | Type check, then production build into `build/`           |
+| `npm run preview`   | Serve the production build at http://localhost:3000       |
 
-### `npm run build`
+## Deploying
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+`npm run build` writes static files to `build/`. Because the app uses
+client-side routing, the host must serve `index.html` for any path that is not
+a file (an "SPA fallback"), otherwise refreshing `/logged-in` returns a 404.
+For example, in nginx: `try_files $uri /index.html;`.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## Project layout
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
-
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
+```
+src/
+  main.tsx                 entry point
+  App.tsx                  providers + router
+  router/                  routes, route guard, path constants
+  session/                 username rules, character counting, script joiners, storage, user context
+  features/                onboarding, landing and not-found pages
+```
